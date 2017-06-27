@@ -1285,8 +1285,7 @@ z.conversation.ConversationRepository = class ConversationRepository {
    * @returns {undefined} No return value
    */
   _update_last_read_timestamp(conversation_et) {
-    const last_message = conversation_et.get_last_message();
-    const timestamp = last_message ? last_message.timestamp() : undefined;
+    const timestamp = conversation_et.last_event_timestamp();
 
     if (timestamp && conversation_et.set_timestamp(timestamp, z.conversation.ConversationUpdateType.LAST_READ_TIMESTAMP)) {
       const message_content = new z.proto.LastRead(conversation_et.id, conversation_et.last_read_timestamp());
@@ -2818,7 +2817,8 @@ z.conversation.ConversationRepository = class ConversationRepository {
    * @returns {Promise} Resolves when the event was handled
    */
   _on_reaction(conversation_et, event_json) {
-    return this.get_message_in_conversation_by_id(conversation_et, event_json.data.message_id)
+    const {data: event_data, time: event_time} = event_json;
+    return this.get_message_in_conversation_by_id(conversation_et, event_data.message_id)
       .then((message_et) => {
         const changes = message_et.update_reactions(event_json);
 
@@ -2826,6 +2826,8 @@ z.conversation.ConversationRepository = class ConversationRepository {
           this.logger.debug(`Updating reactions to message '${event_json.data.message_id}' in conversation '${conversation_et.id}'`, event_json);
           return this._update_user_ets(message_et)
             .then((updated_message_et) => {
+              const reaction_date = new Date(event_time).getTime();
+              conversation_et.set_timestamp(reaction_date, z.conversation.ConversationUpdateType.LAST_EVENT_TIMESTAMP);
               this.conversation_service.update_message_in_db(updated_message_et, changes, conversation_et.id);
               return this._prepare_reaction_notification(conversation_et, updated_message_et, event_json);
             });
